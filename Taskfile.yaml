@@ -1,0 +1,268 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+version: '3'
+
+dotenv: ['.env.sample', '.env']
+
+vars:
+  # Precedence for every env-backed var below: shell/CLI env > .env file > default.
+  # Resolved via scripts/task/env-default.sh because Taskfile v3 dotenv values
+  # aren't visible to `sh:` blocks in `vars:`.
+  NUXEO_RETENTION_VERSION:
+    sh: scripts/task/env-default.sh NUXEO_RETENTION_VERSION "$(node -p "require('./nuxeo-retention-web/package.json').version" 2>/dev/null || echo unknown)"
+  NUXEO_VERSION:
+    sh: scripts/task/env-default.sh NUXEO_VERSION master
+  NUXEO_PACKAGES:
+    sh: scripts/task/env-default.sh NUXEO_PACKAGES
+  NUXEO_DEV_MODE:
+    sh: scripts/task/env-default.sh NUXEO_DEV_MODE true
+
+  SCM_REF:
+    sh: git rev-parse HEAD 2>/dev/null || echo "local"
+
+  NPM: npm
+  WEB_DIR: nuxeo-retention-web
+
+  MAVEN_VERSION:
+    sh: scripts/task/env-default.sh MAVEN_VERSION current
+  MAVEN_HOME: "{{.HOME}}/.sdkman/candidates/maven/{{.MAVEN_VERSION}}"
+  MVN: "{{.MAVEN_HOME}}/bin/mvn"
+  MAVEN_OPTS:
+    sh: scripts/task/env-default.sh MAVEN_OPTS "-Xmx2g -Xms512m"
+
+  JAVA_VERSION:
+    sh: scripts/task/env-default.sh JAVA_VERSION current
+  # Precedence: JAVA_VERSION (.env / CLI) > inherited JAVA_HOME > sdkman current.
+  JAVA_HOME:
+    sh: |
+      JV=$(scripts/task/env-default.sh JAVA_VERSION)
+      if [ -n "$JV" ]; then
+        echo "$HOME/.sdkman/candidates/java/$JV"
+      elif [ -n "$JAVA_HOME" ]; then
+        echo "$JAVA_HOME"
+      else
+        echo "$HOME/.sdkman/candidates/java/current"
+      fi
+
+  NUXEO_PLUGIN_WEBUI_FILE_PATH:
+    sh: scripts/task/env-default.sh NUXEO_PLUGIN_WEBUI_FILE_PATH "./nuxeo-retention-package/target/*.zip"
+  NUXEO_BENCHMARK_MARKETPLACE_PATH:
+    sh: scripts/task/env-default.sh NUXEO_BENCHMARK_MARKETPLACE_PATH "~/your-projects/nuxeo/docker/nuxeo-benchmark/marketplace/"
+
+  DISTRIBUTION_ID:
+    sh: scripts/task/env-default.sh DISTRIBUTION_ID
+  DISTRIBUTION_URL:
+    sh: scripts/task/env-default.sh DISTRIBUTION_URL
+
+  NODE_VERSION:
+    sh: node --version 2>/dev/null || echo "not installed"
+  NPM_VERSION:
+    sh: npm --version 2>/dev/null || echo "not installed"
+  MVN_VERSION:
+    sh: '{{.MVN}} --version 2>/dev/null | head -1 || echo "not installed"'
+
+env:
+  JAVA_HOME: "{{.JAVA_HOME}}"
+  MAVEN_OPTS: "{{.MAVEN_OPTS}}"
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  # ── Installation ────────────────────────────────────────────────────────────
+
+  install:
+    desc: Install npm dependencies for nuxeo-retention-web
+    dir: "{{.WEB_DIR}}"
+    cmds:
+      - "{{.NPM}} install"
+
+  check-node:
+    desc: Check if Node.js is installed and print version
+    preconditions:
+      - sh: which node
+        msg: "Error: Node.js is not installed"
+    cmds:
+      - echo "Node.js {{.NODE_VERSION}}"
+
+  # ── Build ────────────────────────────────────────────────────────────────────
+
+  build:
+    desc: Build the nuxeo-retention-web frontend contribution (rollup)
+    dir: "{{.WEB_DIR}}"
+    cmds:
+      - "{{.NPM}} run build"
+
+  # ── Testing ──────────────────────────────────────────────────────────────────
+
+  test:
+    desc: Run frontend unit tests
+    dir: "{{.WEB_DIR}}"
+    cmds:
+      - "{{.NPM}} run test"
+
+  test-watch:
+    desc: Run frontend unit tests in watch mode
+    dir: "{{.WEB_DIR}}"
+    cmds:
+      - "{{.NPM}} run test:watch"
+
+  ftest:
+    desc: Run functional tests (headless, requires a running Nuxeo server)
+    dir: "{{.WEB_DIR}}"
+    cmds:
+      - "{{.NPM}} run ftest"
+
+  ftest-watch:
+    desc: Run functional tests in watch/debug mode
+    dir: "{{.WEB_DIR}}"
+    cmds:
+      - "{{.NPM}} run ftest:watch"
+
+  # ── Lint & Format ────────────────────────────────────────────────────────────
+
+  lint:
+    desc: Run linting (ESLint + Prettier)
+    dir: "{{.WEB_DIR}}"
+    cmds:
+      - "{{.NPM}} run lint"
+
+  lint-eslint:
+    desc: Run ESLint only
+    dir: "{{.WEB_DIR}}"
+    cmds:
+      - "{{.NPM}} run lint:eslint"
+
+  lint-prettier:
+    desc: Run Prettier check only
+    dir: "{{.WEB_DIR}}"
+    cmds:
+      - "{{.NPM}} run lint:prettier"
+
+  format:
+    desc: Format code with Prettier and ESLint
+    dir: "{{.WEB_DIR}}"
+    cmds:
+      - "{{.NPM}} run format"
+
+  format-eslint:
+    desc: Format code with ESLint
+    dir: "{{.WEB_DIR}}"
+    cmds:
+      - "{{.NPM}} run format:eslint"
+
+  format-prettier:
+    desc: Format code with Prettier
+    dir: "{{.WEB_DIR}}"
+    cmds:
+      - "{{.NPM}} run format:prettier"
+
+  # ── Clean ────────────────────────────────────────────────────────────────────
+
+  clean:
+    desc: Clean npm and Maven build artifacts across all modules
+    cmds:
+      - rm -rf "{{.WEB_DIR}}/node_modules"
+      - task: mp-clean
+
+  # ── Maven ────────────────────────────────────────────────────────────────────
+
+  mp-clean:
+    desc: Clean Maven build
+    cmds:
+      - "{{.MVN}} clean"
+
+  mp-test:
+    desc: Run backend unit tests (mvn test)
+    cmds:
+      - "{{.MVN}} test"
+
+  mp-build:
+    desc: Build all modules with Maven (also builds/lints/tests nuxeo-retention-web via frontend-maven-plugin)
+    cmds:
+      - "{{.MVN}} clean install"
+
+  mp-build-ftest:
+    desc: Build all modules with Maven, including functional tests
+    cmds:
+      - "{{.MVN}} clean install -Pftest"
+
+  mp-build-skip:
+    desc: Build all modules with Maven (skip tests)
+    cmds:
+      - "{{.MVN}} clean install -DskipTests"
+
+  # ── Deploy ───────────────────────────────────────────────────────────────────
+
+  copy-to-benchmark:
+    desc: Copy marketplace zip to local nuxeo-benchmark marketplace directory
+    cmds:
+      - cp {{.NUXEO_PLUGIN_WEBUI_FILE_PATH}} {{.NUXEO_BENCHMARK_MARKETPLACE_PATH}}
+      - echo "Marketplace package copied to {{.NUXEO_BENCHMARK_MARKETPLACE_PATH}}"
+
+  deploy-plugin:
+    desc: Build marketplace package (skip tests) and copy it to the benchmark marketplace directory
+    cmds:
+      - task: mp-build-skip
+      - task: copy-to-benchmark
+
+  deploy:
+    desc: Deploy only nuxeo-retention-package (the marketplace zip) to the configured distribution repository (DISTRIBUTION_ID/DISTRIBUTION_URL)
+    preconditions:
+      - sh: '[ -n "{{.DISTRIBUTION_ID}}" ]'
+        msg: "Error: DISTRIBUTION_ID is not set (set it in .env or pass DISTRIBUTION_ID=... on the CLI)"
+      - sh: '[ -n "{{.DISTRIBUTION_URL}}" ]'
+        msg: "Error: DISTRIBUTION_URL is not set (set it in .env or pass DISTRIBUTION_URL=... on the CLI)"
+    cmds:
+      # Build+install its dependencies (nuxeo-retention, nuxeo-retention-web) locally first —
+      # -am is required to build them since the package depends on them, but only
+      # nuxeo-retention-package itself is targeted by the deploy step below, so only
+      # that artifact gets published.
+      - "{{.MVN}} clean install -pl nuxeo-retention-package -am -DskipTests"
+      - "{{.MVN}} deploy -pl nuxeo-retention-package -Pdeploy -DDISTRIBUTION_ID={{.DISTRIBUTION_ID}} -DDISTRIBUTION_URL={{.DISTRIBUTION_URL}}"
+
+  # ── Combined ─────────────────────────────────────────────────────────────────
+
+  all:
+    desc: Clean, install dependencies, and build the frontend module
+    cmds:
+      - task: clean
+      - task: install
+      - task: build
+
+  full-build:
+    desc: Full build via Maven (frontend + backend + marketplace package)
+    cmds:
+      - task: mp-build
+
+  ci:
+    desc: Frontend CI checks — install, lint, test, build (nuxeo-retention-web)
+    cmds:
+      - task: install
+      - task: lint
+      - task: test
+      - task: build
+
+  # ── Info ─────────────────────────────────────────────────────────────────────
+
+  info:
+    desc: Display project information
+    silent: true
+    cmds:
+      - echo "Nuxeo Retention — Build Configuration"
+      - echo ""
+      - printf '%-30s %s\n' "Version:" "{{.NUXEO_RETENTION_VERSION}}"
+      - printf '%-30s %s\n' "SCM Ref:" "{{.SCM_REF}}"
+      - printf '%-30s %s\n' "Nuxeo Version:" "{{.NUXEO_VERSION}}"
+      - printf '%-30s %s\n' "Nuxeo Packages:" "{{.NUXEO_PACKAGES}}"
+      - printf '%-30s %s\n' "Dev Mode:" "{{.NUXEO_DEV_MODE}}"
+      - echo ""
+      - printf '%-30s %s\n' "Node.js:" "{{.NODE_VERSION}}"
+      - printf '%-30s %s\n' "NPM:" "{{.NPM_VERSION}}"
+      - printf '%-30s %s\n' "Maven:" "{{.MVN_VERSION}}"
+      - printf '%-30s %s\n' "MAVEN_HOME:" "{{.MAVEN_HOME}}"
+      - printf '%-30s %s\n' "JAVA_VERSION:" "{{.JAVA_VERSION}}"
+      - printf '%-30s %s\n' "JAVA_HOME:" "{{.JAVA_HOME}}"
+      - printf '%-30s %s\n' "MAVEN_OPTS:" "{{.MAVEN_OPTS}}"
