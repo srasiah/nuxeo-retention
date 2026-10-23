@@ -4,7 +4,7 @@
   <parent>
     <groupId>org.nuxeo</groupId>
     <artifactId>nuxeo-parent</artifactId>
-    <version>2025.21-SNAPSHOT</version>
+    <version>2025.22-SNAPSHOT</version>
   </parent>
 
   <groupId>org.nuxeo.retention</groupId>
@@ -105,6 +105,24 @@
       </plugins>
     </pluginManagement>
   </build>
+
+  <profiles>
+    <!-- mvn deploy -Pdeploy -Ddistribution.id=… -Ddistribution.url=… -Ddistribution.snapshots.url=… (task deploy:
+         DISTRIBUTION_* in .env); no default repository, and the id names the <server> holding the credentials -->
+    <profile>
+      <id>deploy</id>
+      <distributionManagement>
+        <repository>
+          <id>${distribution.id}</id>
+          <url>${distribution.url}</url>
+        </repository>
+        <snapshotRepository>
+          <id>${distribution.id}</id>
+          <url>${distribution.snapshots.url}</url>
+        </snapshotRepository>
+      </distributionManagement>
+    </profile>
+  </profiles>
 
   <scm>
     <connection>scm:git:git://github.com/nuxeo/nuxeo-retention.git</connection>

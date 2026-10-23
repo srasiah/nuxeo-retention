@@ -5,7 +5,11 @@ const { playwrightLauncher } = require('@web/test-runner-playwright');
 const baseConfig = {
   files: 'test/**/*.test.js',
   browsers: [
-    playwrightLauncher({ product: 'chromium' }),
+    // a fixed locale: from LANG=C.UTF-8, Chromium's default is en-US@posix, which Intl (the date picker) rejects
+    playwrightLauncher({
+      product: 'chromium',
+      createBrowserContext: ({ browser }) => browser.newContext({ locale: 'en-US' }),
+    }),
     /* playwrightLauncher({ product: 'webkit' }), */
     /* playwrightLauncher({ product: 'firefox' }), */
   ],
