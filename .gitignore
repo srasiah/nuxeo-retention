@@ -5,6 +5,9 @@
 *.orig
 *.rej
 
+# local environment (may contain secrets) — see .env.sample for the template
+.env
+
 # jenkins x
 .stignore
 *~gen
