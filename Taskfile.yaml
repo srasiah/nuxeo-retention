@@ -28,8 +28,12 @@ vars:
 
   MAVEN_VERSION:
     sh: scripts/task/env-default.sh MAVEN_VERSION current
-  MAVEN_HOME: "{{.HOME}}/.sdkman/candidates/maven/{{.MAVEN_VERSION}}"
-  MVN: "{{.MAVEN_HOME}}/bin/mvn ${MVN_ARGS:-}"
+  # Precedence: sdkman Maven for MAVEN_VERSION (if installed) > mvn on PATH.
+  MVN_BIN:
+    sh: |
+      B="$HOME/.sdkman/candidates/maven/{{.MAVEN_VERSION}}/bin/mvn"
+      if [ -x "$B" ]; then echo "$B"; else command -v mvn || echo mvn; fi
+  MVN: "{{.MVN_BIN}} ${MVN_ARGS:-}"
   MAVEN_OPTS:
     sh: scripts/task/env-default.sh MAVEN_OPTS "-Xmx2g -Xms512m"
 
@@ -64,7 +68,7 @@ vars:
   NPM_VERSION:
     sh: npm --version 2>/dev/null || echo "not installed"
   MVN_VERSION:
-    sh: '{{.MVN}} --version 2>/dev/null | head -1 || echo "not installed"'
+    sh: '{{.MVN}} -B --version 2>/dev/null | head -1 || echo "not installed"'
 
 env:
   JAVA_HOME: "{{.JAVA_HOME}}"
@@ -248,7 +252,7 @@ tasks:
       - printf '%-30s %s\n' "Node.js:" "{{.NODE_VERSION}}"
       - printf '%-30s %s\n' "NPM:" "{{.NPM_VERSION}}"
       - printf '%-30s %s\n' "Maven:" "{{.MVN_VERSION}}"
-      - printf '%-30s %s\n' "MAVEN_HOME:" "{{.MAVEN_HOME}}"
+      - printf '%-30s %s\n' "MVN_BIN:" "{{.MVN_BIN}}"
       - printf '%-30s %s\n' "JAVA_VERSION:" "{{.JAVA_VERSION}}"
       - printf '%-30s %s\n' "JAVA_HOME:" "{{.JAVA_HOME}}"
       - printf '%-30s %s\n' "MAVEN_OPTS:" "{{.MAVEN_OPTS}}"
